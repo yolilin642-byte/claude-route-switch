@@ -1,0 +1,50 @@
+{
+  "name": "claude-route-switch",
+  "version": "0.1.0",
+  "description": "Switch Claude Agent SDK / Claude Code between official login (main account) and Anthropic-compatible API relays via env vars. Optional local USD wallet by token estimate.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./env": "./src/env.js",
+    "./pricing": "./src/pricing.js"
+  },
+  "bin": {
+    "claude-route": "./bin/claude-route.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "examples",
+    "config.example.json",
+    "README.md",
+    "RESEARCH.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "claude-agent-sdk",
+    "claude-code",
+    "api-relay",
+    "base-url",
+    "route-switch"
+  ],
+  "license": "MIT",
+  "author": "mumu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yolilin642-byte/claude-route-switch.git"
+  },
+  "homepage": "https://github.com/yolilin642-byte/claude-route-switch#readme",
+  "bugs": {
+    "url": "https://github.com/yolilin642-byte/claude-route-switch/issues"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "cli": "node bin/claude-route.js"
+  }
+}

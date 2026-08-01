@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+*.log
+
+# secrets & local state — never commit
+config.json
+wallet.json
+.env
+.env.*
+*.key
