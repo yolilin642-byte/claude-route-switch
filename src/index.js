@@ -31,7 +31,7 @@ export {
   applyFromConfig,
 } from "./route.js";
 
-export { estimateUsd, pickRate, RATES } from "./pricing.js";
+export { estimateUsd, estimateUsdDetailed, pickRate, normalizeRates, RATES } from "./pricing.js";
 
 export {
   loadLedger,

@@ -2,5 +2,9 @@
   "station": "account",
   "baseUrl": "",
   "apiKey": "",
-  "priceMul": 1
+  "priceMul": 1,
+  "rates": {
+    "_comment": "Optional. $ per MTok for models the built-in haiku/sonnet/opus tiers do not cover. Unlisted models are priced at Opus rates and flagged assumed:true.",
+    "gpt-4o-mini": { "in": 0.15, "out": 0.6 }
+  }
 }

@@ -9,7 +9,7 @@ import {
   publicStatus,
   saveConfig,
   setRouteMode,
-  estimateUsd,
+  estimateUsdDetailed,
   walletAct,
   walletSummary,
   resolveConfigPath,
@@ -157,7 +157,8 @@ try {
   }
 
   if (cmd === "estimate") {
-    const usd = estimateUsd(
+    const cfg = loadConfig(configPath);
+    const est = estimateUsdDetailed(
       {
         input_tokens: args.in || 0,
         output_tokens: args.out || 0,
@@ -165,9 +166,29 @@ try {
         cache_read_input_tokens: args.cr || 0,
       },
       args.model || "opus",
-      args.mul || 1,
+      args.mul || cfg.priceMul || 1,
+      cfg.rates,
     );
-    console.log(JSON.stringify({ usd, model: args.model || "opus", priceMul: args.mul || 1 }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          usd: est.usd,
+          model: est.model,
+          tier: est.tier,
+          assumed: est.assumed,
+          priceMul: args.mul || cfg.priceMul || 1,
+          ...(est.assumed
+            ? {
+                warn:
+                  `Unknown model "${est.model}" — priced at Opus rates. ` +
+                  'Add `"rates": { "<model>": { "in": N, "out": N } }` to config.json.',
+              }
+            : {}),
+        },
+        null,
+        2,
+      ),
+    );
     process.exit(0);
   }
 

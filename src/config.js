@@ -7,7 +7,10 @@ const DEFAULTS = {
   baseUrl: "",
   apiKey: "",
   priceMul: 1,
+  rates: {},
 };
+
+const OWN_KEYS = ["station", "baseUrl", "apiKey", "priceMul", "rates"];
 
 /**
  * Resolve config file path.
@@ -21,18 +24,32 @@ export function resolveConfigPath(file) {
 }
 
 /**
+ * Read + parse JSON, tolerating a UTF-8 BOM (Notepad / PowerShell `Out-File -Encoding utf8`
+ * both write one, and a BOM makes JSON.parse throw — which used to silently reset the
+ * whole config to defaults).
+ * @param {string} p
+ */
+function readJson(p) {
+  return JSON.parse(fs.readFileSync(p, "utf8").replace(/^﻿/, ""));
+}
+
+/**
  * Load route config from disk.
- * Supports either flat `{ station, baseUrl, apiKey, priceMul }`
+ * Supports either flat `{ station, baseUrl, apiKey, priceMul, rates }`
  * or nested `{ ccRelay: { ... } }` (compat with some host apps).
  * @param {string} [file]
  */
 export function loadConfig(file) {
   const p = resolveConfigPath(file);
   try {
-    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    const j = readJson(p);
     const raw = j?.ccRelay && typeof j.ccRelay === "object" ? j.ccRelay : j;
     return normalizeConfig({ ...DEFAULTS, ...raw });
-  } catch {
+  } catch (err) {
+    // Missing file is normal; a malformed one is not — say so instead of pretending it's empty.
+    if (err && err.code !== "ENOENT" && fs.existsSync(p)) {
+      console.warn(`[claude-route] ignoring unreadable config ${p}: ${err.message}`);
+    }
     return { ...DEFAULTS };
   }
 }
@@ -47,7 +64,7 @@ export function saveConfig(patch, file) {
   const p = resolveConfigPath(file);
   let disk = {};
   try {
-    disk = JSON.parse(fs.readFileSync(p, "utf8"));
+    disk = readJson(p);
   } catch {
     disk = {};
   }
@@ -59,7 +76,7 @@ export function saveConfig(patch, file) {
   });
 
   // Nested host shape
-  if (disk.ccRelay || Object.keys(disk).some((k) => !["station", "baseUrl", "apiKey", "priceMul"].includes(k))) {
+  if (disk.ccRelay || Object.keys(disk).some((k) => !OWN_KEYS.includes(k))) {
     if (!disk.ccRelay) {
       // First time embedding into a larger object without ccRelay — write flat if disk empty-ish
       if (Object.keys(disk).length === 0) {
@@ -109,5 +126,8 @@ export function mergeConfigPatch(prev = {}, patch = {}) {
   let priceMul = Number(prev.priceMul) > 0 ? Number(prev.priceMul) : 1;
   if (patch.priceMul != null && Number(patch.priceMul) > 0) priceMul = Number(patch.priceMul);
 
-  return normalizeConfig({ station, baseUrl, apiKey, priceMul });
+  // Missing `rates` keeps the previous table; an explicit object (even {}) replaces it.
+  const rates = Object.prototype.hasOwnProperty.call(patch, "rates") ? patch.rates : prev.rates;
+
+  return normalizeConfig({ station, baseUrl, apiKey, priceMul, rates });
 }

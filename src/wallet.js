@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { estimateUsd } from "./pricing.js";
+import { estimateUsdDetailed } from "./pricing.js";
 import { loadConfig, resolveConfigPath } from "./config.js";
 
 function defaultLedger() {
@@ -53,7 +53,8 @@ export function recordSpend({ usage, model, route, configPath }) {
   if (!route || route.mode !== "api") return null;
   const cfg = loadConfig(configPath);
   const mul = Number(route.priceMul ?? cfg.priceMul) > 0 ? Number(route.priceMul ?? cfg.priceMul) : 1;
-  const cost = estimateUsd(usage, model, mul);
+  const est = estimateUsdDetailed(usage, model, mul, cfg.rates);
+  const cost = est.usd;
   if (!(cost > 0)) return null;
 
   const led = loadLedger(configPath);
@@ -61,6 +62,8 @@ export function recordSpend({ usage, model, route, configPath }) {
     ts: Date.now(),
     costUsd: cost,
     model: model || "",
+    tier: est.tier,
+    assumed: est.assumed,
     in: Number(usage.input_tokens || 0),
     out: Number(usage.output_tokens || 0),
     cache_write: Number(usage.cache_creation_input_tokens || 0),
@@ -90,6 +93,10 @@ export function walletSummary(configPath) {
   const led = loadLedger(configPath);
   const balance = Number(led.balanceUsd) || 0;
   const used = Number(led.usedUsd) || 0;
+  const history = Array.isArray(led.history) ? led.history : [];
+  const assumedModels = [
+    ...new Set(history.filter((h) => h && h.assumed).map((h) => h.model || "(unnamed)")),
+  ];
   return {
     currency: "USD",
     balanceUsd: Math.round(balance * 100) / 100,
@@ -98,8 +105,16 @@ export function walletSummary(configPath) {
     turns: Number(led.turns) || 0,
     lastCostUsd: Number(led.lastCostUsd) || 0,
     lastAt: led.lastAt || null,
-    recent: Array.isArray(led.history) ? led.history.slice(0, 8) : [],
+    recent: history.slice(0, 8),
+    assumedModels,
     note: "Local estimate from public list prices × priceMul. Relays often have no balance API.",
+    ...(assumedModels.length
+      ? {
+          warn:
+            `Priced at Opus rates by fallback (real cost unknown): ${assumedModels.join(", ")}. ` +
+            "Add a `rates` entry in config.json for these models.",
+        }
+      : {}),
   };
 }
 

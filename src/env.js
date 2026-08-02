@@ -14,6 +14,7 @@
  * @property {string} [baseUrl]
  * @property {string} [apiKey]
  * @property {number} [priceMul]
+ * @property {Record<string, { in: number, out: number, cacheWrite?: number, cacheRead?: number }>} [rates]
  */
 
 /**
@@ -27,7 +28,7 @@
 /**
  * Normalize config fields.
  * @param {RouteConfig} r
- * @returns {Required<Pick<RouteConfig,"station"|"baseUrl"|"apiKey"|"priceMul">>}
+ * @returns {Required<Pick<RouteConfig,"station"|"baseUrl"|"apiKey"|"priceMul"|"rates">>}
  */
 export function normalizeConfig(r = {}) {
   return {
@@ -35,6 +36,7 @@ export function normalizeConfig(r = {}) {
     baseUrl: String(r.baseUrl || "").trim().replace(/\/+$/, ""),
     apiKey: String(r.apiKey || "").trim(),
     priceMul: Number(r.priceMul) > 0 ? Number(r.priceMul) : 1,
+    rates: r.rates && typeof r.rates === "object" && !Array.isArray(r.rates) ? r.rates : {},
   };
 }
 

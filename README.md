@@ -91,14 +91,17 @@ Call `applyRouteEnv` / `applyFromConfig` **immediately before** each `query()`. 
   "station": "account",
   "baseUrl": "https://api.example.com",
   "apiKey": "<your-relay-key>",
-  "priceMul": 1
+  "priceMul": 1,
+  "rates": {}
 }
 ```
 
 - `station: "account"` → always account mode (URL/Key kept on disk for later).
 - Any other station + non-empty URL+Key → API mode.
 - `apiKey` is **never validated by prefix**. Anthropic Console keys start with `sk-ant-`, but third-party relays issue keys in their own formats (`fe…`, `cr_…`, bare hex, …). Any non-empty string is passed through to `ANTHROPIC_API_KEY` as-is.
+- `rates` is optional; see [Pricing non-Claude models](#pricing-non-claude-models).
 - Nested host apps may store the same object under `ccRelay` — load/save still work.
+- A UTF-8 BOM in `config.json` is tolerated (Notepad and PowerShell's `Out-File -Encoding utf8` both write one). Any other parse error is reported on stderr rather than silently falling back to defaults.
 
 Safe UI merge (do not wipe secrets when the form sends masks / empty disabled fields):
 
@@ -116,6 +119,39 @@ claude-route topup 20
 claude-route wallet
 claude-route estimate --in 1000000 --out 0 --model sonnet
 ```
+
+### Pricing non-Claude models
+
+Built-in rates cover **haiku / sonnet / opus** only. Any other model name falls back to
+Opus-tier rates — a relay running `gpt-4o-mini` would otherwise be billed at roughly 100x
+its real price. The fallback is no longer silent: estimates carry `assumed: true`, and the
+wallet lists the offending models under `assumedModels` with a `warn`.
+
+```bash
+$ claude-route estimate --in 1000000 --out 1000000 --model gpt-4o-mini
+{ "usd": 90, "tier": "opus", "assumed": true, "warn": "Unknown model ..." }
+```
+
+Fix it by declaring the real prices ($ / MTok) in `config.json`. Keys match by exact name
+first, then by longest substring, so one entry covers dated variants:
+
+```json
+{
+  "rates": {
+    "gpt-4o-mini": { "in": 0.15, "out": 0.6 },
+    "deepseek-chat": { "in": 0.27, "out": 1.1 }
+  }
+}
+```
+
+```bash
+$ claude-route estimate --in 1000000 --out 1000000 --model gpt-4o-mini-2024-07-18
+{ "usd": 0.75, "tier": "gpt-4o-mini", "assumed": false }
+```
+
+`cacheWrite` / `cacheRead` are optional and default to `in × 1.25` and `in × 0.1`.
+Third-party prices are deliberately **not** bundled: they change often and would rot in a
+release. The library only promises to be honest about what it does not know.
 
 ## CLI
 
