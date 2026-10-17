@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * CLI: claude-route status | api | account | set | topup | estimate
+ * CLI: claude-route status | list | api | account | default | set | topup | estimate
  */
 import {
   applyFromConfig,
   envSnapshot,
   loadConfig,
+  publicConfig,
   publicStatus,
   saveConfig,
   setRouteMode,
@@ -17,12 +18,15 @@ import {
 } from "../src/index.js";
 
 function help() {
-  console.log(`claude-route — switch Claude between main account and API relay
+  console.log(`claude-route — switch Claude between accounts and API relays
 
 Usage:
-  claude-route status              Show mode, paths, wallet (no full key)
-  claude-route account             Switch to official login
-  claude-route api                 Switch to API (needs baseUrl + apiKey)
+  claude-route status [--lane L]         Show the route, paths, wallet (no secrets)
+  claude-route list                      Show the pool: URLs, keys, accounts, lanes
+  claude-route account [name] [--lane L] Official login, or a named account
+  claude-route api [key] [url] [--lane L]
+                                         API: the current URL + key, or ones from the pool
+  claude-route default --lane L          Drop a lane's own route (it follows the global one)
   claude-route set --url U --key K [--mul N] [--station custom]
   claude-route topup <usd>         Add to local wallet balance
   claude-route wallet set <usd>    Set wallet balance
@@ -52,24 +56,28 @@ function parseArgs(argv) {
     else if (a === "--cache-write") args.cw = Number(argv[++i]);
     else if (a === "--cache-read") args.cr = Number(argv[++i]);
     else if (a === "--config") args.config = argv[++i];
+    else if (a === "--lane") args.lane = argv[++i];
     else if (a === "-h" || a === "--help") args.help = true;
     else args._.push(a);
   }
   return args;
 }
 
-function printStatus(configPath) {
-  const s = publicStatus(configPath);
+function printStatus(configPath, lane) {
+  const s = publicStatus(configPath, lane);
   const env = envSnapshot();
   console.log(JSON.stringify({
     config: resolveConfigPath(configPath),
     walletFile: resolveWalletPath(configPath),
+    ...(lane != null ? { lane } : {}),
     mode: s.mode,
     station: s.station,
     baseUrl: s.baseUrl,
     apiKeySet: s.apiKeySet,
     canApi: s.canApi,
     priceMul: s.priceMul,
+    route: s.route,
+    ...(s.error ? { error: s.error } : {}),
     wallet: s.wallet,
     envNow: env,
   }, null, 2));
@@ -86,17 +94,23 @@ const configPath = args.config;
 
 try {
   if (cmd === "status") {
-    printStatus(configPath);
+    printStatus(configPath, args.lane);
     process.exit(0);
   }
 
-  if (cmd === "account" || cmd === "api") {
-    const r = setRouteMode(cmd, { configPath });
+  if (cmd === "list") {
+    const { urls, keys, accounts, lanes, activeUrlId, activeKeyId, accountId } = publicConfig(loadConfig(configPath));
+    console.log(JSON.stringify({ urls, keys, accounts, lanes, activeUrlId, activeKeyId, accountId: accountId || "main" }, null, 2));
+    process.exit(0);
+  }
+
+  if (cmd === "account" || cmd === "api" || cmd === "default") {
+    const r = setRouteMode(args._.join(" "), { configPath, lane: args.lane });
     if (!r.ok) {
       console.error(r.error);
       process.exit(1);
     }
-    printStatus(configPath);
+    printStatus(configPath, args.lane);
     process.exit(0);
   }
 

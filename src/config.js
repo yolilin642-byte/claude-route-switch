@@ -10,7 +10,10 @@ const DEFAULTS = {
   rates: {},
 };
 
-const OWN_KEYS = ["station", "baseUrl", "apiKey", "priceMul", "rates"];
+const OWN_KEYS = [
+  "station", "baseUrl", "apiKey", "priceMul", "rates",
+  "accountId", "activeUrlId", "activeKeyId", "urls", "keys", "accounts", "lanes",
+];
 
 /**
  * Resolve config file path.
@@ -50,7 +53,7 @@ export function loadConfig(file) {
     if (err && err.code !== "ENOENT" && fs.existsSync(p)) {
       console.warn(`[claude-route] ignoring unreadable config ${p}: ${err.message}`);
     }
-    return { ...DEFAULTS };
+    return normalizeConfig(DEFAULTS);
   }
 }
 
@@ -96,38 +99,69 @@ export function saveConfig(patch, file) {
   return next;
 }
 
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+/** A secret the UI sent back masked or blank — means "unchanged". */
+function isMasked(s) {
+  return typeof s !== "string" || !s.trim() || s.includes("•") || /^\*+$/.test(s.trim());
+}
+
+/** Incoming secret wins unless masked; "__clear__" clears. */
+function keepSecret(incoming, previous) {
+  if (incoming === "__clear__") return "";
+  return isMasked(incoming) ? previous || "" : incoming.trim();
+}
+
 /**
  * Merge rules used when UI saves settings (never wipe URL/Key by accident).
  * - Missing baseUrl field → keep previous
  * - Explicit empty baseUrl → clear
  * - apiKey masked / empty / unchanged → keep previous
  * - apiKey === "__clear__" → clear
+ * - Pool lists (`urls`, `keys`, `accounts`) and `lanes`: missing → keep; present → replace,
+ *   except that a masked `keys[].secret` / `accounts[].oauthToken` keeps the stored one
+ *   for the same id.
  * @param {object} prev
  * @param {object} patch
  */
 export function mergeConfigPatch(prev = {}, patch = {}) {
-  const station = String(patch.station || prev.station || "account");
-  let baseUrl = Object.prototype.hasOwnProperty.call(patch, "baseUrl")
-    ? String(patch.baseUrl || "").trim().replace(/\/+$/, "")
-    : String(prev.baseUrl || "").trim().replace(/\/+$/, "");
+  const old = normalizeConfig(prev);
+  const station = String(patch.station || old.station || "account");
+  const baseUrl = has(patch, "baseUrl") ? patch.baseUrl : old.baseUrl;
+  const apiKey = has(patch, "apiKey") ? keepSecret(patch.apiKey, old.apiKey) : old.apiKey;
 
-  let apiKey = prev.apiKey || "";
-  const incoming = patch.apiKey;
-  if (incoming === "__clear__") apiKey = "";
-  else if (
-    typeof incoming === "string" &&
-    incoming.trim() &&
-    !incoming.includes("•") &&
-    !/^•|^\*+$/.test(incoming.trim())
-  ) {
-    apiKey = incoming.trim();
-  }
-
-  let priceMul = Number(prev.priceMul) > 0 ? Number(prev.priceMul) : 1;
+  let priceMul = old.priceMul;
   if (patch.priceMul != null && Number(patch.priceMul) > 0) priceMul = Number(patch.priceMul);
 
   // Missing `rates` keeps the previous table; an explicit object (even {}) replaces it.
-  const rates = Object.prototype.hasOwnProperty.call(patch, "rates") ? patch.rates : prev.rates;
+  const rates = has(patch, "rates") ? patch.rates : old.rates;
 
-  return normalizeConfig({ station, baseUrl, apiKey, priceMul, rates });
+  const keys = has(patch, "keys") && Array.isArray(patch.keys)
+    ? patch.keys.map((k) => ({
+        ...k,
+        secret: keepSecret(k?.secret, old.keys.find((o) => o.id === String(k?.id || k?.name || "").trim())?.secret),
+      }))
+    : old.keys;
+  const accounts = has(patch, "accounts") && Array.isArray(patch.accounts)
+    ? patch.accounts.map((a) => ({
+        ...a,
+        oauthToken: keepSecret(a?.oauthToken, old.accounts.find((o) => o.id === String(a?.id || "").trim().toLowerCase())?.oauthToken),
+      }))
+    : old.accounts;
+
+  return normalizeConfig({
+    ...old,
+    station,
+    baseUrl,
+    apiKey,
+    priceMul,
+    rates,
+    keys,
+    accounts,
+    urls: has(patch, "urls") ? patch.urls : old.urls,
+    lanes: has(patch, "lanes") ? patch.lanes : old.lanes,
+    accountId: has(patch, "accountId") ? patch.accountId : old.accountId,
+    activeUrlId: has(patch, "activeUrlId") ? patch.activeUrlId : old.activeUrlId,
+    activeKeyId: has(patch, "activeKeyId") ? patch.activeKeyId : old.activeKeyId,
+  });
 }

@@ -1,10 +1,19 @@
 {
   "station": "account",
-  "baseUrl": "",
-  "apiKey": "",
+  "accountId": "",
   "priceMul": 1,
+  "urls": [
+    { "id": "u1", "name": "relay-a", "baseUrl": "https://relay-a.example" }
+  ],
+  "keys": [
+    { "id": "k1", "name": "work", "secret": "", "urlId": "u1" }
+  ],
+  "accounts": [
+    { "id": "b", "name": "Account B", "oauthToken": "", "keyDir": "", "prefer": "keyDir" }
+  ],
+  "lanes": {},
   "rates": {
-    "_comment": "Optional. $ per MTok for models the built-in haiku/sonnet/opus tiers do not cover. Unlisted models are priced at Opus rates and flagged assumed:true.",
+    "_comment": "Optional. $ per MTok for models the built-in Claude table does not cover. Unlisted models are priced at the newest Opus rates and flagged assumed:true.",
     "gpt-4o-mini": { "in": 0.15, "out": 0.6 }
   }
 }

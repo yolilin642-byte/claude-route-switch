@@ -128,15 +128,53 @@ describe("pricing + wallet", () => {
     const opus = estimateUsd(usage, "opus");
     const sonnet = estimateUsd(usage, "sonnet");
     assert.ok(sonnet < opus);
-    assert.equal(opus, 15);
+    assert.equal(opus, 4); // bare "opus" = newest listed (Opus 5.5)
+  });
+
+  it("prices by model version, not just family", () => {
+    const usage = { input_tokens: 1_000_000, output_tokens: 1_000_000 };
+    assert.equal(estimateUsd(usage, "claude-opus-4-1-20250805"), 90);
+    assert.equal(estimateUsd(usage, "claude-opus-4-20250514"), 90); // the date is not a minor version
+    assert.equal(estimateUsd(usage, "claude-opus-4-5-20251101"), 30);
+    assert.equal(estimateUsd(usage, "claude-opus-5-5"), 24);
+    assert.equal(estimateUsd(usage, "anthropic/claude-sonnet-4.5"), 18);
+    assert.equal(estimateUsd(usage, "claude-sonnet-5"), 12);
+    assert.equal(estimateUsdDetailed(usage, "claude-3-5-haiku-20241022").tier, "haiku-3.5");
+    assert.equal(estimateUsdDetailed(usage, "claude-haiku-4-5").tier, "haiku-4.5");
+  });
+
+  it("a Claude version the table does not know is flagged", () => {
+    const est = estimateUsdDetailed({ input_tokens: 1_000_000 }, "claude-3-7-sonnet-20250219");
+    assert.equal(est.assumed, true);
+    assert.equal(est.tier, "sonnet-5.5");
+  });
+
+  it("prices 1-hour cache writes at 2x and model-specific cache reads", () => {
+    const write = (split) => ({
+      cache_creation_input_tokens: 1_000_000,
+      ...(split ? { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1_000_000 } } : {}),
+    });
+    assert.equal(estimateUsd(write(false), "claude-sonnet-4-5"), 3.75);
+    assert.equal(estimateUsd(write(true), "claude-sonnet-4-5"), 6);
+    assert.equal(estimateUsd({ cache_read_input_tokens: 1_000_000 }, "claude-opus-5-5"), 0.2); // 0.05x
+    assert.equal(estimateUsd({ cache_read_input_tokens: 1_000_000 }, "claude-opus-4-5"), 0.5); // 0.1x
+  });
+
+  it("Haiku 5.5 prompts over 100k tokens pay the long-context price", () => {
+    const short = estimateUsdDetailed({ input_tokens: 50_000 }, "claude-haiku-5-5");
+    const long = estimateUsdDetailed({ input_tokens: 20_000, cache_read_input_tokens: 130_000 }, "claude-haiku-5-5");
+    assert.equal(short.tier, "haiku-5.5");
+    assert.equal(short.usd, 0.005);
+    assert.equal(long.tier, "haiku-5.5-long");
+    assert.equal(long.usd, 0.0165); // 20k × $0.50 + 130k × $0.05
   });
 
   it("flags unknown models as assumed, known tiers as not", () => {
     const usage = { input_tokens: 1_000_000, output_tokens: 0 };
     const mini = estimateUsdDetailed(usage, "gpt-4o-mini");
     assert.equal(mini.assumed, true);
-    assert.equal(mini.tier, "opus");
-    assert.equal(mini.usd, 15); // still Opus-priced — the point is it says so
+    assert.equal(mini.tier, "opus-5.5");
+    assert.equal(mini.usd, 4); // still Opus-priced — the point is it says so
 
     for (const m of ["claude-opus-4", "claude-sonnet-4-5", "claude-3-5-haiku"]) {
       assert.equal(estimateUsdDetailed(usage, m).assumed, false, m);

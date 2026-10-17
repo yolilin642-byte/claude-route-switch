@@ -3,7 +3,7 @@
 > **验证环境**：Windows 11，Claude Code 2.1.201 / 2.1.210（2026-09）、2.1.280（2026-10）。这里用到的好几个开关都没写进官方文档，版本一升就可能变，动手前先拿你自己的版本复测一遍。
 > **我们是怎么跑的**：宿主是一个用 Node 写的 Agent SDK 程序，每次 `query()` 起一个 CLI 子进程。「换号接着聊」「好几个会话并发各走各的号」都是在这条路上测的。直接在终端里开交互式 CC（包括在 tmux 里开好几个），我们只用 `claude -p` 单发跑过几组，没长期这么用过。
 > **标注**：【实测】是我们亲手跑过的；【推断】是读源码或别人的票得出来的，我们自己没跑；【未验证】就是还没验。
-> 这篇是本仓库 [README](../README.md) 的续篇。README 管的是「订阅号 ↔ API」怎么切，这篇补上「好几个订阅号」那一块。这篇里的代码是独立的一小段，不依赖本仓库的包，复制就能用。
+> 这篇是本仓库 [README](../README.md) 的续篇。README 管的是「订阅号 ↔ API」怎么切，这篇补上「好几个订阅号」那一块。第二步讲的那段代码，就是本仓库包里的 `envFor()`。
 
 ---
 
@@ -66,39 +66,31 @@ CLI 挑凭证有固定的先后顺序；会话记录按 `cwd + session_id` 存�
 
 ## 第二步：每次调用前拼一份 env
 
-```js
-const STRIP = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
-               "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_SECURESTORAGE_CONFIG_DIR"];
-
-/**
- * 给一次 query 拼 env。choice：
- *   { kind: "login" }                 走本机默认登录
- *   { kind: "token", token }          某个订阅号的一年期钥匙
- *   { kind: "api", baseUrl, apiKey }  API 或中转
- */
-export function egressEnv(choice, base = process.env) {
-  const env = { ...base };
-  for (const k of STRIP) delete env[k];   // 上一轮留下的一律清掉，尤其是钥匙格那个开关
-  // CLAUDE_CONFIG_DIR 不碰：会话记录、CLAUDE.md、设置都在它底下，动了就分家
-  if (choice.kind === "token") env.CLAUDE_CODE_OAUTH_TOKEN = choice.token;
-  if (choice.kind === "api") {
-    env.ANTHROPIC_BASE_URL = choice.baseUrl;
-    env.ANTHROPIC_API_KEY = choice.apiKey;
-  }
-  return env;
-}
-```
-
 在 Agent SDK 里，`options.env` 是每次 `query()` 各带一份的。同一个进程里好几个会话并发，各走各的出口，互相不会盖掉。**别去改全局的 `process.env`**，那是整个进程共用的一份。
 
+本仓库的 `envFor()` 就是干这个的。`config.json` 里给每条「道」（一扇窗、一个会话，你自己起名）记着它走哪个出口，每次调用前要一份新的 env：
+
 ```js
-for await (const m of query({ prompt, options: { env: egressEnv(choice), resume: sessionId } })) {
-  if (m.type === "rate_limit_event") saveUsage(choice, m.rate_limit_info);
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { envFor } from "claude-route-switch";
+
+const { env, route } = envFor("窗口A");
+for await (const m of query({ prompt, options: { env, resume: sessionId } })) {
+  if (m.type === "rate_limit_event") saveUsage(route, m.rate_limit_info);
   // ...
 }
 ```
 
+它对 env 做的事（配置怎么写见 [README](../README.md#config-shape)）：
+
+- **走 API**：设 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_API_KEY`，删掉 `ANTHROPIC_AUTH_TOKEN`（它会压过 key）和钥匙格那个开关。
+- **走本机登录**：删掉中转那两个变量和钥匙格开关，进程自己带的 OAuth 设置原样留着。
+- **走别的订阅号**：钥匙格里有活钥匙，就把开关指过去、清掉 token；格子里的钥匙过期了，就退回这个号的一年期钥匙；两样都有时听 `prefer` 的。两样都没有就直接报错，不会往外送一把空钥匙。
+- `CLAUDE_CONFIG_DIR` 永远不碰：会话记录、`CLAUDE.md`、设置都在它底下，动了就分家。
+
 同一个 `sessionId`，这一轮走 A 号，下一轮走 B 号，再下一轮走 API，都能接着聊。【实测，Agent SDK】
+
+三条道同时跑：本机登录、B 号的一年期钥匙、B 号的钥匙格，三个 `query()` 一起发出去，8.9 秒全回来，每条道的回执都对得上自己那个号。【实测，2026-10-18，用的就是 `envFor()`】
 
 不写代码、直接开 CC 的话，PowerShell 里这样写：
 
@@ -135,7 +127,7 @@ claude -p "在吗" --output-format stream-json --verbose | Select-String rate_li
 - 【实测】只用一年期钥匙（登录钥匙全部隔开），撞墙状态下：`five_hour 1 / seven_day 0.76`，还带着重置时间。
 - 【实测】用登录钥匙，没撞墙：`0.17 / 0.17`。
 - 【实测，2026-10-18，CLI 2.1.280】只用一年期钥匙，没撞墙：`status: allowed_warning`（回执里写着 `surpassedThreshold: 0.75`，是周额度过线了；上面那组没过线的是 `allowed`），`five_hour 0.57 / seven_day 0.95`。[clauth #110](https://github.com/uwuclxdy/clauth/issues/110) 在 HTTP 层也测过，正常 200 响应里就带着。
-- Agent SDK 宿主那边也能收到同样类型的消息：CLI 本体里的 schema 写的是 "Rate limit event emitted when rate limit info changes"。【推断，我们的 bot 还没接】
+- 【实测，2026-10-18，Agent SDK】SDK 的消息流里也有这条 `rate_limit_event`。三条道并发时，本机登录那条周额度是 0.49，B 号的一年期钥匙和钥匙格两条都是 0.95，各自对得上各自的号。（我们自己的 bot 还没接这条消息。）
 
 两点要注意：
 
@@ -158,7 +150,7 @@ claude -p "在吗" --output-format stream-json --verbose | Select-String rate_li
 1. 只盯着「问额度被 403」，以为一年期钥匙看不见额度，结果方向错了一个月。它只是不能**主动问**，回执里一直都有。
 2. 拿环境变量塞登录钥匙去对照，以为能排除变量，其实环境变量这条路本身就不去拉额度。
 3. 手写 OAuth 时，`state` 短了只会回一句 `Invalid request format`（官方生成的是 43 个字符）。**能用官方 `/login` 就别手写。**
-4. **登录钥匙过期时，CLI 会把钥匙清成空字符串，文件本身还在。**如果宿主只看文件在不在、有多大，就会继续往空钥匙上送请求。要读 `accessToken` 判断它是不是空的。【实测，跟 [#91571](https://github.com/anthropics/claude-code/issues/91571) 描述的一致】
+4. **登录钥匙过期时，CLI 会把钥匙清成空字符串，文件本身还在。**如果宿主只看文件在不在、有多大，就会继续往空钥匙上送请求。要读 `accessToken` 判断它是不是空的（本仓库的 `keyDirUsable()` 就是这么判的）。【实测，跟 [#91571](https://github.com/anthropics/claude-code/issues/91571) 描述的一致】
 5. 已知还会在到期**之前**就被清空（[#83464](https://github.com/anthropics/claude-code/issues/83464)、#91571）。所以文件里写的到期日不算保票。
 
 ---

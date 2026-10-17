@@ -1,26 +1,19 @@
 #!/usr/bin/env bash
-# Apply route env then run Claude Code / any child that reads Anthropic env.
-# Usage: ./examples/shell-wrapper.sh claude
+# Set one lane's route env, then run Claude Code / any child that reads Anthropic env.
+# Usage: CLAUDE_ROUTE_LANE=night ./examples/shell-wrapper.sh claude -p "hi"
+#        ./examples/shell-wrapper.sh claude          (no lane = the global route)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export CLAUDE_ROUTE_CONFIG="${CLAUDE_ROUTE_CONFIG:-$ROOT/config.json}"
 
-# Print env exports from apply (node prints JSON; we set vars here via node -e)
-eval "$(node --input-type=module -e "
-import { applyFromConfig, loadConfig } from './src/index.js';
-import { resolveConfigPath } from './src/config.js';
-const cfgPath = process.env.CLAUDE_ROUTE_CONFIG;
-const route = applyFromConfig(cfgPath);
-if (route.mode === 'api') {
-  const c = (await import('./src/config.js')).loadConfig(cfgPath);
-  console.log('export ANTHROPIC_BASE_URL=' + JSON.stringify(c.baseUrl));
-  console.log('export ANTHROPIC_API_KEY=' + JSON.stringify(c.apiKey));
-  console.log('unset ANTHROPIC_AUTH_TOKEN');
-} else {
-  console.log('unset ANTHROPIC_BASE_URL');
-  console.log('unset ANTHROPIC_API_KEY');
-}
-console.error('# mode=' + route.mode);
-" 2>/dev/null)"
+# node prints one export/unset line per route variable; values are single-quoted for bash.
+exports="$(cd "$ROOT" && node --input-type=module -e "
+import { envFor, ROUTE_ENV_KEYS } from './src/index.js';
+const { env, route } = envFor(process.env.CLAUDE_ROUTE_LANE || undefined, { configPath: process.env.CLAUDE_ROUTE_CONFIG });
+const q = (v) => \"'\" + String(v).replace(/'/g, \"'\\\\''\") + \"'\";
+for (const k of ROUTE_ENV_KEYS) console.log(k in env ? 'export ' + k + '=' + q(env[k]) : 'unset ' + k);
+console.error('# lane=' + (route.lane || '(global)') + ' mode=' + route.mode + ' credential=' + route.credential);
+")"
+eval "$exports"
 
 exec "$@"

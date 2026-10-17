@@ -1,7 +1,7 @@
 {
   "name": "claude-route-switch",
-  "version": "0.1.0",
-  "description": "Switch Claude Agent SDK / Claude Code between official login (main account) and Anthropic-compatible API relays via env vars. Optional local USD wallet by token estimate.",
+  "version": "0.2.0",
+  "description": "Give each Claude Agent SDK / Claude Code conversation its own egress: the machine login, named subscription accounts, or Anthropic-compatible API relays from a named pool. Optional local USD wallet by token estimate.",
   "type": "module",
   "main": "./src/index.js",
   "exports": {

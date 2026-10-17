@@ -45,9 +45,24 @@ export function saveLedger(patch, configPath) {
   return next;
 }
 
+/** Add one turn to a per-lane / per-key sub-ledger. */
+function bump(book, id, cost) {
+  const next = { ...(book && typeof book === "object" ? book : {}) };
+  const prev = next[id] || { usedUsd: 0, turns: 0 };
+  next[id] = {
+    usedUsd: Math.round(((Number(prev.usedUsd) || 0) + cost) * 1e6) / 1e6,
+    turns: (Number(prev.turns) || 0) + 1,
+    lastAt: new Date().toISOString(),
+  };
+  return next;
+}
+
 /**
  * Record a turn cost when mode is api.
- * @param {{ usage: object, model?: string, route?: { mode: string, priceMul?: number, station?: string, baseUrl?: string }, configPath?: string }} args
+ * Besides the total, the turn is booked under its lane (`byLane`) and under the key that
+ * paid for it (`byKey`, keyed by pool key id, else by base URL) — "how much did this
+ * conversation spend" and "how much did this key spend" are different questions.
+ * @param {{ usage: object, model?: string, route?: { mode: string, priceMul?: number, station?: string, baseUrl?: string, lane?: string, keyId?: string }, configPath?: string }} args
  */
 export function recordSpend({ usage, model, route, configPath }) {
   if (!route || route.mode !== "api") return null;
@@ -70,6 +85,8 @@ export function recordSpend({ usage, model, route, configPath }) {
     cache_read: Number(usage.cache_read_input_tokens || 0),
     station: route.station,
     baseUrl: route.baseUrl,
+    lane: route.lane || "",
+    keyId: route.keyId || "",
   };
   const history = [entry, ...(Array.isArray(led.history) ? led.history : [])].slice(0, 80);
   const usedUsd = Math.round(((Number(led.usedUsd) || 0) + cost) * 1e6) / 1e6;
@@ -81,16 +98,29 @@ export function recordSpend({ usage, model, route, configPath }) {
       lastCostUsd: cost,
       lastAt: new Date().toISOString(),
       history,
+      byLane: route.lane ? bump(led.byLane, route.lane, cost) : led.byLane || {},
+      byKey: bump(led.byKey, route.keyId || route.baseUrl || "unknown", cost),
     },
     configPath,
   );
 }
 
+const cents = (book) =>
+  Object.fromEntries(
+    Object.entries(book && typeof book === "object" ? book : {}).map(([id, v]) => [
+      id,
+      { usedUsd: Math.round((Number(v?.usedUsd) || 0) * 100) / 100, turns: Number(v?.turns) || 0 },
+    ]),
+  );
+
 /**
  * @param {string} [configPath]
+ * @param {string} [lane] also report what this lane spent
  */
-export function walletSummary(configPath) {
+export function walletSummary(configPath, lane) {
   const led = loadLedger(configPath);
+  const byLane = cents(led.byLane);
+  const byKey = cents(led.byKey);
   const balance = Number(led.balanceUsd) || 0;
   const used = Number(led.usedUsd) || 0;
   const history = Array.isArray(led.history) ? led.history : [];
@@ -106,6 +136,11 @@ export function walletSummary(configPath) {
     lastCostUsd: Number(led.lastCostUsd) || 0,
     lastAt: led.lastAt || null,
     recent: history.slice(0, 8),
+    byLane,
+    byKey,
+    ...(lane != null && lane !== ""
+      ? { lane: String(lane), laneUsedUsd: byLane[lane]?.usedUsd || 0, laneTurns: byLane[lane]?.turns || 0 }
+      : {}),
     assumedModels,
     note: "Local estimate from public list prices × priceMul. Relays often have no balance API.",
     ...(assumedModels.length
@@ -146,6 +181,8 @@ export function walletAct(action, amount, configPath) {
         lastCostUsd: 0,
         lastAt: null,
         history: [],
+        byLane: {},
+        byKey: {},
       },
       configPath,
     );
