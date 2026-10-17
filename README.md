@@ -170,6 +170,15 @@ Env overrides:
 - `CLAUDE_ROUTE_CONFIG` — config path  
 - `CLAUDE_ROUTE_WALLET` — wallet path  
 
+## Several subscription accounts
+
+[MULTI-ACCOUNT.zh-CN.md](./MULTI-ACCOUNT.zh-CN.md) (Chinese) is the sequel: several Pro/Max accounts plus API side by side on one machine, sharing one session store. Every claim is tagged *tested* / *inferred* / *unverified*, with CLI versions and dates. It covers:
+
+- passing a per-call `options.env` to the Agent SDK instead of mutating `process.env`, so concurrent turns can use different egresses
+- `CLAUDE_SECURESTORAGE_CONFIG_DIR` on **Windows** (it is not macOS-only), and the `/login` overwrite trap
+- reading 5h / 7-day usage from `rate_limit_event`, which works with a `setup-token` too, even though that token cannot call the usage endpoint
+- login credentials expire after ~29 days no matter how often they refresh
+
 ## Examples
 
 - `examples/with-agent-sdk.mjs` — apply route, optional SDK ping, record spend  
