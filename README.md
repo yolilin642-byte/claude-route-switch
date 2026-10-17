@@ -29,7 +29,13 @@ cd claude-route-switch
 npm link   # optional global CLI: claude-route
 ```
 
-Zero runtime dependencies (Node ≥ 18).
+Zero runtime dependencies (Node ≥ 18), so there is no `npm install` step for the folder itself.
+
+Not published to npm. To `import` it from another project, install it straight from GitHub:
+
+```bash
+npm install github:yolilin642-byte/claude-route-switch
+```
 
 ## Quick start
 
