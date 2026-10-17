@@ -11,6 +11,12 @@ Optional: a **local USD wallet** that estimates cost from token usage (most rela
 
 Extracted as a standalone library from a private home chat stack. No product UI, no secrets, no personal data.
 
+**What's in here · 这里有什么**
+
+- **The package** (`src/`, `bin/`) — this README is its manual. 代码包，下面整页都是它的说明书。
+- [docs/RESEARCH.md](./docs/RESEARCH.md) — why a conversation survives switching egress, with sources. 换出口以后对话为什么接得上，带出处的调研。
+- [docs/multi-account.zh-CN.md](./docs/multi-account.zh-CN.md) — several subscription accounts side by side, field notes in Chinese. Its code is standalone and does not use this package. 好几个订阅号并排跑的实测笔记，里面的代码不依赖这个包。
+
 ## Why
 
 When the official account hits rate limits, you can keep the same Agent SDK `query()` path and only change the **egress**:
@@ -19,7 +25,7 @@ When the official account hits rate limits, you can keep the same Agent SDK `que
 applyRouteEnv(config)  →  process.env.ANTHROPIC_*  →  @anthropic-ai/claude-agent-sdk
 ```
 
-The conversation survives the switch because transcripts are plain JSONL keyed by `cwd` + `session_id` — they record *what happened*, not *which credential paid for it*. Auth is applied per request. See [RESEARCH.md](./RESEARCH.md) for the sourced write-up (session file format, resume semantics, prompt-cache behaviour across accounts, and the policy line you should not cross).
+The conversation survives the switch because transcripts are plain JSONL keyed by `cwd` + `session_id` — they record *what happened*, not *which credential paid for it*. Auth is applied per request. See [docs/RESEARCH.md](./docs/RESEARCH.md) for the sourced write-up (session file format, resume semantics, prompt-cache behaviour across accounts, and the policy line you should not cross).
 
 ## Install
 
@@ -175,15 +181,6 @@ Env overrides:
 
 - `CLAUDE_ROUTE_CONFIG` — config path  
 - `CLAUDE_ROUTE_WALLET` — wallet path  
-
-## Several subscription accounts
-
-[MULTI-ACCOUNT.zh-CN.md](./MULTI-ACCOUNT.zh-CN.md) (Chinese) is the sequel: several Pro/Max accounts plus API side by side on one machine, sharing one session store. Every claim is tagged *tested* / *inferred* / *unverified*, with CLI versions and dates. All of it was tested from an Agent SDK host (one CLI subprocess per `query()`); interactive terminal sessions, including several in tmux, were only spot-checked with `claude -p`. It covers:
-
-- passing a per-call `options.env` to the Agent SDK instead of mutating `process.env`, so concurrent turns can use different egresses
-- `CLAUDE_SECURESTORAGE_CONFIG_DIR` on **Windows** (it is not macOS-only), and the `/login` overwrite trap
-- reading 5h / 7-day usage from `rate_limit_event`, which works with a `setup-token` too, even though that token cannot call the usage endpoint
-- login credentials expire after ~29 days no matter how often they refresh
 
 ## Examples
 

@@ -18,7 +18,7 @@
     "examples",
     "config.example.json",
     "README.md",
-    "RESEARCH.md",
+    "docs",
     "LICENSE"
   ],
   "engines": {
