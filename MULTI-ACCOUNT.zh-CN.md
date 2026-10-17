@@ -1,6 +1,7 @@
 # 一台电脑并排跑几个 Claude 订阅号＋API：钥匙、额度、换出口（Windows 实测笔记）
 
 > **验证环境**：Windows 11，Claude Code 2.1.201 / 2.1.210（2026-09）、2.1.280（2026-10）。这里用到的好几个开关都没写进官方文档，版本一升就可能变，动手前先拿你自己的版本复测一遍。
+> **我们是怎么跑的**：宿主是一个用 Node 写的 Agent SDK 程序，每次 `query()` 起一个 CLI 子进程。「换号接着聊」「好几个会话并发各走各的号」都是在这条路上测的。直接在终端里开交互式 CC（包括在 tmux 里开好几个），我们只用 `claude -p` 单发跑过几组，没长期这么用过。
 > **标注**：【实测】是我们亲手跑过的；【推断】是读源码或别人的票得出来的，我们自己没跑；【未验证】就是还没验。
 > 这篇是本仓库 [README](./README.md) 的续篇。README 管的是「订阅号 ↔ API」怎么切，这篇补上「好几个订阅号」那一块。
 
@@ -10,8 +11,8 @@
 
 能做到：
 
-- 每扇窗、每次调用，自己挑走哪个订阅号，还是走 API。
-- 换了出口，对话照样接着往下聊：会话记录、`CLAUDE.md`、设置只有一份，大家共用。【实测，我们每天都这么用】
+- 每个会话、每次调用，自己挑走哪个订阅号，还是走 API。
+- 换了出口，对话照样接着往下聊：会话记录、`CLAUDE.md`、设置只有一份，大家共用。【实测，Agent SDK 宿主，我们每天都这么用】
 - 每个号的 5 小时额度和周额度都看得见，包括只有一年期钥匙的号。【实测，见第三步】
 
 做不到：
@@ -88,7 +89,7 @@ export function egressEnv(choice, base = process.env) {
 }
 ```
 
-在 Agent SDK 里，`options.env` 是每次 `query()` 各带一份的。几扇窗并发各走各的出口，互相不会盖掉。**别去改全局的 `process.env`**，那是整个进程共用的一份。
+在 Agent SDK 里，`options.env` 是每次 `query()` 各带一份的。同一个进程里好几个会话并发，各走各的出口，互相不会盖掉。**别去改全局的 `process.env`**，那是整个进程共用的一份。
 
 ```js
 for await (const m of query({ prompt, options: { env: egressEnv(choice), resume: sessionId } })) {
@@ -97,7 +98,7 @@ for await (const m of query({ prompt, options: { env: egressEnv(choice), resume:
 }
 ```
 
-同一个 `sessionId`，这一轮走 A 号，下一轮走 B 号，再下一轮走 API，都能接着聊。【实测】
+同一个 `sessionId`，这一轮走 A 号，下一轮走 B 号，再下一轮走 API，都能接着聊。【实测，Agent SDK】
 
 不写代码、直接开 CC 的话，PowerShell 里这样写：
 
@@ -107,6 +108,8 @@ Remove-Item Env:ANTHROPIC_AUTH_TOKEN, Env:ANTHROPIC_API_KEY, Env:ANTHROPIC_BASE_
 $env:CLAUDE_CODE_OAUTH_TOKEN = "<B 号的 setup-token>"
 claude --resume
 ```
+
+【推断】上面清变量、塞钥匙那几行，我们拿 `claude -p` 单发跑过（第三步那几组就是这么测的）。可是拿它开交互式 CC、用 `--resume` 接上别的号聊过的对话，我们没试过；tmux 里同时开好几个、各塞各的号，也没试过。按机制应该跟 SDK 是同一回事（会话记录里不记是谁付的钱），但我们没跑过，你用之前先试一轮。
 
 ---
 

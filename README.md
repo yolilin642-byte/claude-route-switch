@@ -172,7 +172,7 @@ Env overrides:
 
 ## Several subscription accounts
 
-[MULTI-ACCOUNT.zh-CN.md](./MULTI-ACCOUNT.zh-CN.md) (Chinese) is the sequel: several Pro/Max accounts plus API side by side on one machine, sharing one session store. Every claim is tagged *tested* / *inferred* / *unverified*, with CLI versions and dates. It covers:
+[MULTI-ACCOUNT.zh-CN.md](./MULTI-ACCOUNT.zh-CN.md) (Chinese) is the sequel: several Pro/Max accounts plus API side by side on one machine, sharing one session store. Every claim is tagged *tested* / *inferred* / *unverified*, with CLI versions and dates. All of it was tested from an Agent SDK host (one CLI subprocess per `query()`); interactive terminal sessions, including several in tmux, were only spot-checked with `claude -p`. It covers:
 
 - passing a per-call `options.env` to the Agent SDK instead of mutating `process.env`, so concurrent turns can use different egresses
 - `CLAUDE_SECURESTORAGE_CONFIG_DIR` on **Windows** (it is not macOS-only), and the `/login` overwrite trap
